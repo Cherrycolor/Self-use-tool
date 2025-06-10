@@ -1,0 +1,3 @@
+streamlit==1.45.1
+moviepy==2.2.1
+altair==5.5.0
