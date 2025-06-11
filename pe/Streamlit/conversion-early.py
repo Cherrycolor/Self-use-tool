@@ -1,12 +1,13 @@
 import streamlit as st
 import os
-from moviepy.video.io.VideoFileClip import VideoFileClip
-from moviepy.video.compositing.CompositeVideoClip import concatenate_videoclips
-from tempfile import NamedTemporaryFile
+import tempfile
+import sys
+from contextlib import contextmanager
+import subprocess
 
-# 设置页面配置（增加视频上传大小限制为2GB）
+# 设置页面配置
 st.set_page_config(
-    page_title="g文本格式处理工具",
+    page_title="📝 文本格式处理工具",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -14,7 +15,6 @@ st.set_page_config(
 # 自定义CSS样式（新增视频预览区样式）
 st.markdown("""
 <style>
-/* 全局样式 */
 .stButton>button {
     background-color: #e95678;
     color: white;
@@ -43,14 +43,23 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 创建配置文件目录
+# 创建配置文件目录（用于大文件上传）
 if not os.path.exists(".streamlit"):
     os.makedirs(".streamlit")
+config_path = os.path.join(".streamlit", "config.toml")
+if not os.path.exists(config_path):
+    with open(config_path, "w") as f:
+        f.write("[server]\nmaxUploadSize = 2000")  # 设置2GB上传限制
 
-# 写入配置文件（设置2GB上传限制）
-config_content = "[server]\nmaxUploadSize = 2000"
-with open(".streamlit/config.toml", "w") as f:
-    f.write(config_content)
+# 视频处理库导入（带兼容性检查）
+try:
+    from moviepy.video.io.VideoFileClip import VideoFileClip
+    from moviepy.video.compositing.CompositeVideoClip import concatenate_videoclips
+
+    MOVIEPY_AVAILABLE = True
+except (ImportError, ModuleNotFoundError) as e:
+    st.warning(f"视频处理功能不可用: {str(e)}")
+    MOVIEPY_AVAILABLE = False
 
 
 # 核心文本处理函数
@@ -69,46 +78,70 @@ def format_blank(input_str):
     return ','.join(input_str.split())
 
 
-# 新增视频合并函数
 def merge_videos(uploaded_files):
     """合并多个视频文件"""
-    clips = []
-    temp_files = []
+    if not MOVIEPY_AVAILABLE:
+        raise RuntimeError("视频处理库不可用")
 
-    # 保存上传文件到临时目录
-    for uploaded_file in uploaded_files:
-        with NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
-            temp_file.write(uploaded_file.read())
-            temp_files.append(temp_file.name)
+    # 临时文件管理器
+    @contextmanager
+    def temporary_files(files):
+        temp_paths = []
+        try:
+            for file in files:
+                # 创建临时文件
+                suffix = os.path.splitext(file.name)[1]  # 保留原始扩展名
+                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+                    temp_file.write(file.getvalue())
+                    temp_paths.append(temp_file.name)
+            yield temp_paths
+        finally:
+            for path in temp_paths:
+                if os.path.exists(path):
+                    os.unlink(path)
 
-    # 逐个加载视频
-    for temp_file in temp_files:
-        clip = VideoFileClip(temp_file)
-        clips.append(clip)
+    # 合并处理
+    with temporary_files(uploaded_files) as temp_paths:
+        clips = []
+        try:
+            # 加载所有视频剪辑
+            for path in temp_paths:
+                clip = VideoFileClip(path)
+                clips.append(clip)
 
-    # 合并视频
-    final_clip = concatenate_videoclips(clips)
+            # 合并视频
+            final_clip = concatenate_videoclips(clips)
 
-    # 生成输出文件
-    output_path = "merged_video.mp4"
-    final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac")
+            # 生成输出文件
+            output_path = "merged_video.mp4"
+            final_clip.write_videofile(
+                output_path,
+                codec="libx264",
+                audio_codec="aac",
+                threads=4  # 使用多线程加速处理
+            )
 
-    # 清理临时文件
-    for clip in clips:
-        clip.close()
-    for temp_file in temp_files:
-        os.unlink(temp_file)
-
-    return output_path
+            return output_path
+        finally:
+            # 关闭所有剪辑释放资源
+            for clip in clips:
+                try:
+                    clip.close()
+                except:
+                    pass
 
 
 # 界面布局
-st.title("📝 g文本格式处理工具")
+st.title("📝 文本格式处理工具")
 
-# 功能选择 - 新增视频合并选项
+# 功能选择 - 添加视频合并选项
+func_choices = ["替换双引号为单引号", "格式化逗号分隔字符串", "空格替换为逗号"]
+if MOVIEPY_AVAILABLE:
+    func_choices.append("合并多个视频")
+
 func_choice = st.radio(
     "选择功能",
-    ["替换双引号为单引号", "格式化逗号分隔字符串", "空格替换为逗号", "合并多个视频"],
+    func_choices,
     horizontal=True
 )
 
@@ -131,22 +164,23 @@ with st.expander("📌 点击查看使用示例", expanded=True):
         **示例输入输出:**
         - '2079 2077 2074' → '2079,2077,2074'
         """)
-    else:  # 视频合并示例
+    elif func_choice == "合并多个视频":
         st.markdown("""
         **使用说明:**
-        1. 上传多个MP4视频文件（最多可上传2GB大小的文件）
+        1. 上传多个视频文件（支持MP4、MOV等格式）
         2. 点击"合并视频"按钮
         3. 合并完成后可预览并下载结果视频
+        *注意：视频总大小不超过2GB*
         """)
 
 # 视频合并功能实现
-if func_choice == "合并多个视频":
-    st.subheader("视频合并工具")
+if func_choice == "合并多个视频" and MOVIEPY_AVAILABLE:
+    st.subheader("🎬 视频合并工具")
 
     # 多文件上传（支持最大2GB）
     uploaded_files = st.file_uploader(
-        "选择多个视频文件（MP4格式）",
-        type=["mp4"],
+        "选择多个视频文件",
+        type=["mp4", "mov", "avi"],
         accept_multiple_files=True,
         help="支持同时选择多个文件，总大小不超过2GB"
     )
@@ -155,21 +189,21 @@ if func_choice == "合并多个视频":
         total_size = sum(file.size for file in uploaded_files)
         st.info(f"已选择 {len(uploaded_files)} 个文件，总大小: {total_size / 1024 / 1024:.2f} MB")
 
-        # 显示预览
+        # 显示预览（每行最多3个）
         cols = st.columns(min(3, len(uploaded_files)))
         for i, file in enumerate(uploaded_files):
             with cols[i % 3]:
-                st.video(file, format="video/mp4")  #
+                st.video(file, format="video/mp4")  # 使用自动检测格式
                 st.caption(file.name)
 
     # 合并按钮
-    if st.button("🚀 合并视频", disabled=len(uploaded_files) < 2):
+    if st.button("🚀 合并视频", type="primary", disabled=len(uploaded_files) < 2):
         with st.spinner("视频合并中，请稍候..."):
             try:
                 output_path = merge_videos(uploaded_files)
 
                 # 显示合并结果
-                st.success("视频合并完成！")
+                st.success("✅ 视频合并完成！")
                 st.subheader("合并结果预览")
                 st.video(output_path, format="video/mp4")
 
@@ -183,12 +217,15 @@ if func_choice == "合并多个视频":
                     )
 
                 # 清理生成的文件
-                os.unlink(output_path)
+                if os.path.exists(output_path):
+                    os.unlink(output_path)
 
             except Exception as e:
-                st.error(f"视频合并失败: {str(e)}")
+                st.error(f"❌ 视频合并失败: {str(e)}")
+                # 显示详细错误信息
+                st.exception(e)
 
-# 原有文本处理功能
+# 文本处理功能
 else:
     # 输入方式
     input_type = st.radio(
@@ -219,11 +256,11 @@ else:
                     output = replace_quotes(input_text)
                 elif func_choice == "格式化逗号分隔字符串":
                     output = format_string(input_text)
-                else:
+                elif func_choice == "空格替换为逗号":
                     output = format_blank(input_text)
 
                 # 显示结果
-                st.subheader("处理结果")
+                st.subheader("📝 处理结果")
                 st.code(output, language='plaintext')
 
                 # 下载功能
@@ -234,13 +271,25 @@ else:
                     mime='text/plain'
                 )
             except Exception as e:
-                st.error(f"处理出错: {str(e)}")
+                st.error(f"❌ 处理出错: {str(e)}")
         else:
-            st.warning("请输入有效内容！")
+            st.warning("⚠️ 请输入有效内容！")
 
-# 配置提示
-st.sidebar.info("""
-**配置说明**  
-已启用2GB大文件上传支持  
-配置文件路径: `.streamlit/config.toml`
+# 环境信息
+st.sidebar.info(f"""
+**运行环境信息**  
+Python版本: {sys.version.split()[0]}  
+Streamlit版本: {st.__version__}  
+视频处理功能: {'✅ 可用' if MOVIEPY_AVAILABLE else '❌ 不可用'}  
+最大上传限制: 2GB  
 """)
+
+# 安装指引
+if not MOVIEPY_AVAILABLE:
+    st.sidebar.warning("""
+    **缺少视频处理依赖**  
+    需要安装MoviePy库才能使用视频合并功能：
+    ```bash
+    pip install moviepy
+    ```
+    """)

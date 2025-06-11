@@ -170,7 +170,7 @@ with st.expander("📌 点击查看使用示例", expanded=True):
         **使用说明:**
         1. 上传多个视频文件（支持MP4、MOV等格式）
         2. 点击"合并视频"按钮
-        3. 合并完成后可预览并下载结果视频
+        3. 合并完成后可下载结果视频
         *注意：视频总大小不超过2GB*
         """)
 
@@ -190,13 +190,6 @@ if func_choice == "合并多个视频" and MOVIEPY_AVAILABLE:
         total_size = sum(file.size for file in uploaded_files)
         st.info(f"已选择 {len(uploaded_files)} 个文件，总大小: {total_size / 1024 / 1024:.2f} MB")
 
-        # 显示预览（每行最多3个）
-        cols = st.columns(min(3, len(uploaded_files)))
-        for i, file in enumerate(uploaded_files):
-            with cols[i % 3]:
-                st.video(file, format="video/mp4")  # 使用自动检测格式
-                st.caption(file.name)
-
     # 合并按钮
     if st.button("🚀 合并视频", type="primary", disabled=len(uploaded_files) < 2):
         with st.spinner("视频合并中，请稍候..."):
@@ -205,9 +198,7 @@ if func_choice == "合并多个视频" and MOVIEPY_AVAILABLE:
 
                 # 显示合并结果
                 st.success("✅ 视频合并完成！")
-                st.subheader("合并结果预览")
-                st.video(output_path, format="video/mp4")
-
+                
                 # 提供下载
                 with open(output_path, "rb") as f:
                     st.download_button(
