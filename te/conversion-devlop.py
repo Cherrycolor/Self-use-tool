@@ -1,20 +1,20 @@
-import streamlit as st
-import os
-import tempfile
+import streamlit as st # 用于构建交互式web应用
+import os # 提供与操作系统交互的功能
+import tempfile # 创建临时文件和目录
 import sys
-from contextlib import contextmanager
-import subprocess
+from contextlib import contextmanager # 简化上下文管理器的创建
 
-# 设置页面配置
+# 设置页面配置（标题/布局宽度/初始侧边栏状态）
 st.set_page_config(
     page_title="📝 文本格式处理工具",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# 自定义CSS样式（新增视频预览区样式）
+# 自定义CSS样式
 st.markdown("""
 <style>
+/* 按钮样式 */
 .stButton>button {
     background-color: #e95678;
     color: white;
@@ -22,18 +22,20 @@ st.markdown("""
     box-shadow: 0 4px 8px rgba(0,0,0,0.1);
 }
 
+/* 输入框样式 */
 .stTextArea textarea, .stTextInput input, .stFileUploader[type=file] {
     border: 1px solid #dfe1e5;
     border-radius: 8px;
 }
 
+/* 侧边栏样式 */
 .stExpanderHeader {
     background-color: #f0f2f5;
     padding: 10px;
     border-radius: 8px 8px 0 0;
 }
 
-/* 新增视频预览区样式 */
+/* 视频预览区样式 */
 .video-preview {
     max-width: 100%;
     border-radius: 12px;
