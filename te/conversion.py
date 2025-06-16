@@ -17,6 +17,7 @@ def main():
 
     # 根据选择执行功能
     func_choice = ui_components.function_selector(MOVIEPY_AVAILABLE)
+    ui_components.show_function_examples(func_choice) # 动态显示功能示例
     if func_choice == "合并多个视频" and MOVIEPY_AVAILABLE:
         video_merger.handle_video_merge()
     else:
