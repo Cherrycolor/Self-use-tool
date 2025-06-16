@@ -1,5 +1,20 @@
 import streamlit as st
 
+def initialize_ui(MOVIEPY_AVAILABLE):
+    st.set_page_config(
+        page_title="📝 文本格式处理工具",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+
+    apply_custom_styles()
+
+    st.title("📝 文本格式处理工具")  # 主界面
+    show_sidebar_info(MOVIEPY_AVAILABLE) # 显示侧边栏信息
+
+    func_choice = function_selector(MOVIEPY_AVAILABLE) # 功能路由
+    show_function_examples(func_choice) # 显示侧边栏信息
+
 def apply_custom_styles():
     """应用自定义CSS样式"""
     st.markdown("""
