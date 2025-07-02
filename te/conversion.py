@@ -1,10 +1,7 @@
 # 主程序入口
-import streamlit as st
 from ui import ui_components
 from core import text_processor, video_merger
 from utils import config_manager
-import sys
-import os
 
 # 初始化应用
 def main():
